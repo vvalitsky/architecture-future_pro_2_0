@@ -1,0 +1,17 @@
+# Рабочая директория локальных проверок (run.sh)
+.verify/
+
+# Terraform (локальные артефакты — state хранится удалённо, см. Task2/RUNNING.md)
+**/.terraform/
+**/.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# Артефакты демо удалённого state
+scripts/local-backend-demo/.terraform*
+scripts/local-backend-demo/terraform.tfstate*
+
+# Прочее
+.DS_Store

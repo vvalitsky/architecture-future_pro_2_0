@@ -1,0 +1,239 @@
+name: Terraform CI/CD
+
+# Пайплайн развёртывания инфраструктуры «Будущее 2.0» с УДАЛЁННЫМ state
+# (Yandex Object Storage, S3-backend). Логика:
+#   * pull_request  -> fmt + validate + plan (комментарий в PR, БЕЗ apply);
+#   * push в main   -> fmt + validate + apply (через защищённое environment);
+#   * ручной запуск -> workflow_dispatch с обязательным подтверждением apply.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "../../terraform/**"
+      - ".github/workflows/terraform.yml"
+  push:
+    branches: [main]
+    paths:
+      - "../../terraform/**"
+  workflow_dispatch:
+    inputs:
+      approve_apply:
+        description: 'Введите "apply" для запуска terraform apply вручную'
+        required: true
+        default: "plan-only"
+
+# Минимально необходимые права токена (least privilege).
+permissions:
+  contents: read
+  pull-requests: write
+
+# Только статические, не секретные значения (безопасно для workflow-level env).
+env:
+  TF_VERSION: "1.10.5"
+  TF_WORKING_DIR: Task2/terraform
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1) Проверка форматирования и валидации. Секреты не нужны (-backend=false).
+  # ---------------------------------------------------------------------------
+  fmt-validate:
+    name: fmt + validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.TF_WORKING_DIR }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      # Кэш скачанных провайдеров, чтобы не тянуть их в каждом job/запуске.
+      - name: Cache Terraform plugins
+        uses: actions/cache@v4
+        with:
+          path: ~/.terraform.d/plugin-cache
+          key: tf-plugins-${{ runner.os }}-${{ hashFiles('Task2/terraform/versions.tf') }}
+          restore-keys: tf-plugins-${{ runner.os }}-
+
+      - name: Terraform fmt (check)
+        run: terraform fmt -check -recursive
+
+      # -backend=false: валидация не требует доступа к state/бэкенду.
+      - name: Terraform init (no backend)
+        run: terraform init -backend=false
+
+      - name: Terraform validate
+        run: terraform validate -no-color
+
+  # ---------------------------------------------------------------------------
+  # 2) PLAN — только на pull_request. Публикует результат в комментарий PR.
+  # ---------------------------------------------------------------------------
+  plan:
+    name: plan (PR)
+    needs: fmt-validate
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.TF_WORKING_DIR }}
+    # Секреты/переменные — на уровне job (там, где реально нужны).
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      TF_VAR_yc_cloud_id: ${{ vars.YC_CLOUD_ID }}
+      TF_VAR_yc_folder_id: ${{ vars.YC_FOLDER_ID }}
+      TF_VAR_yc_zone: ${{ vars.YC_ZONE }}
+      TF_VAR_env: ${{ vars.TF_ENV }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Cache Terraform plugins
+        uses: actions/cache@v4
+        with:
+          path: ~/.terraform.d/plugin-cache
+          key: tf-plugins-${{ runner.os }}-${{ hashFiles('Task2/terraform/versions.tf') }}
+          restore-keys: tf-plugins-${{ runner.os }}-
+
+      # Ключ JSON сервисного аккаунта пишем во временный файл из секрета.
+      - name: Write Yandex SA key
+        run: echo "$YC_SA_JSON" > "$RUNNER_TEMP/sa-key.json"
+        env:
+          YC_SA_JSON: ${{ secrets.YC_SA_JSON }}
+
+      # УДАЛЁННЫЙ backend. bucket/key передаём через -backend-config
+      # (значения — из Variables, не из кода).
+      - name: Terraform init (remote backend)
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="key=${{ vars.TF_STATE_KEY }}"
+
+      - name: Terraform plan
+        id: plan
+        run: |
+          terraform plan -no-color -input=false \
+            -var="yc_service_account_key_file=$RUNNER_TEMP/sa-key.json" \
+            -out=tfplan
+          # Человекочитаемый план для публикации diff в комментарий PR.
+          terraform show -no-color tfplan > plan_output.txt
+
+      # Удаляем временный ключ СА (best-effort), не дожидаясь конца job.
+      - name: Cleanup SA key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/sa-key.json"
+
+      # Публикуем фактический diff плана в комментарий к PR (в свёрнутом блоке).
+      - name: Comment plan on PR
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const dir = process.env.TF_WORKING_DIR || 'Task2/terraform';
+            let plan = '';
+            try {
+              plan = fs.readFileSync(`${dir}/plan_output.txt`, 'utf8');
+            } catch (e) {
+              plan = 'План недоступен — смотрите логи job.';
+            }
+            const MAX = 60000; // лимит на размер комментария GitHub
+            const shown = plan.length > MAX
+              ? plan.slice(0, MAX) + '\n... (обрезано; полный вывод — в логах job)'
+              : plan;
+            const body = [
+              `#### Terraform Plan \`${{ job.status }}\``,
+              `Окружение: \`${{ vars.TF_ENV }}\`. State: удалённо в Yandex Object Storage ` +
+                `(bucket \`${{ vars.TF_STATE_BUCKET }}\`, key \`${{ vars.TF_STATE_KEY }}\`).`,
+              `Apply выполнится после merge в \`main\` (approval на environment \`production\`).`,
+              '',
+              '<details><summary>Показать terraform plan</summary>',
+              '',
+              '```hcl',
+              shown,
+              '```',
+              '',
+              '</details>',
+            ].join('\n');
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body,
+            });
+
+  # ---------------------------------------------------------------------------
+  # 3) APPLY — на push в main ИЛИ ручной workflow_dispatch с подтверждением.
+  #    Защищено environment (approval через environment protection rules).
+  # ---------------------------------------------------------------------------
+  apply:
+    name: apply (main / manual)
+    needs: fmt-validate
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.approve_apply == 'apply')
+    runs-on: ubuntu-latest
+    # environment с protection rules = кнопка "approve" + список ревьюеров.
+    environment: production
+    defaults:
+      run:
+        working-directory: ${{ env.TF_WORKING_DIR }}
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      TF_VAR_yc_cloud_id: ${{ vars.YC_CLOUD_ID }}
+      TF_VAR_yc_folder_id: ${{ vars.YC_FOLDER_ID }}
+      TF_VAR_yc_zone: ${{ vars.YC_ZONE }}
+      TF_VAR_env: ${{ vars.TF_ENV }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Cache Terraform plugins
+        uses: actions/cache@v4
+        with:
+          path: ~/.terraform.d/plugin-cache
+          key: tf-plugins-${{ runner.os }}-${{ hashFiles('Task2/terraform/versions.tf') }}
+          restore-keys: tf-plugins-${{ runner.os }}-
+
+      - name: Write Yandex SA key
+        run: echo "$YC_SA_JSON" > "$RUNNER_TEMP/sa-key.json"
+        env:
+          YC_SA_JSON: ${{ secrets.YC_SA_JSON }}
+
+      - name: Terraform init (remote backend)
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="key=${{ vars.TF_STATE_KEY }}"
+
+      # Пересобираем план в этом же job и применяем именно его (-out/apply plan),
+      # чтобы apply применил ровно то, что было спланировано.
+      - name: Terraform plan
+        run: |
+          terraform plan -no-color -input=false \
+            -var="yc_service_account_key_file=$RUNNER_TEMP/sa-key.json" \
+            -out=tfplan
+
+      - name: Terraform apply
+        run: terraform apply -no-color -input=false -auto-approve tfplan
+
+      # Удаляем временный ключ (best-effort).
+      - name: Cleanup SA key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/sa-key.json"

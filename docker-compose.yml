@@ -1,0 +1,51 @@
+# docker-compose.yml — локальная S3-совместимая среда (Minio) для демонстрации
+# удалённого state Terraform из Task2 БЕЗ облачных кредов и без локального state.
+#
+#   docker compose up -d minio          # поднять Minio
+#   docker compose run --rm createbucket # создать bucket под state
+#   docker compose down -v               # остановить и удалить данные
+#
+# Консоль Minio: http://localhost:9001  (логин/пароль: minioadmin / minioadmin)
+# S3 endpoint:   http://localhost:9000
+name: future20-local
+
+services:
+  minio:
+    image: minio/minio:latest
+    container_name: future20-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    networks:
+      - future20
+
+  # Одноразовый сервис: ждёт готовности Minio и создаёт versioned-bucket под state.
+  createbucket:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        until mc alias set local http://minio:9000 minioadmin minioadmin; do
+          echo 'waiting for minio...'; sleep 2;
+        done
+        mc mb --ignore-existing local/future20-tfstate
+        mc version enable local/future20-tfstate
+        echo 'BUCKET READY: future20-tfstate'
+    networks:
+      - future20
+
+volumes:
+  minio-data:
+
+networks:
+  future20:
+    name: future20-net

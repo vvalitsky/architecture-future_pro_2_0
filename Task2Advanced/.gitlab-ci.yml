@@ -1,0 +1,107 @@
+# .gitlab-ci.yml — эквивалент GitHub Actions пайплайна для GitLab CI.
+#
+# Инфраструктура «Будущее 2.0», УДАЛЁННЫЙ state (Yandex Object Storage, S3-backend).
+# Stages:
+#   validate -> fmt + validate;
+#   plan     -> terraform plan -out (артефакт передаётся в apply);
+#   apply    -> terraform apply plan, ТОЛЬКО вручную (when: manual) на ветке main.
+#
+# Секреты берутся из маскированных CI/CD Variables (Settings -> CI/CD -> Variables):
+#   AWS_ACCESS_KEY_ID       (Masked, Protected) — access key S3-backend
+#   AWS_SECRET_ACCESS_KEY   (Masked, Protected) — secret key S3-backend
+#   YC_SA_JSON              (Masked/File)        — JSON-ключ сервисного аккаунта
+#   YC_CLOUD_ID, YC_FOLDER_ID, YC_ZONE          — адресация (не секреты)
+#   TF_STATE_BUCKET, TF_STATE_KEY               — параметры backend
+#   TF_ENV                                      — имя окружения (dev/stage/prod)
+
+image:
+  name: hashicorp/terraform:1.10.5
+  entrypoint: [""]
+
+stages:
+  - validate
+  - plan
+  - apply
+
+variables:
+  # Относительный путь (от CI_PROJECT_DIR) — важно для artifacts/cache,
+  # которые в GitLab задаются относительно корня проекта.
+  TF_ROOT: Task2/terraform
+  TF_PLAN_FILE: tfplan
+  # Ключ SA пишется во временный файл; путь отдаём провайдеру через TF_VAR_*.
+  SA_KEY_FILE: ${CI_PROJECT_DIR}/sa-key.json
+  TF_VAR_yc_cloud_id: ${YC_CLOUD_ID}
+  TF_VAR_yc_folder_id: ${YC_FOLDER_ID}
+  TF_VAR_yc_zone: ${YC_ZONE}
+  TF_VAR_env: ${TF_ENV}
+  TF_VAR_yc_service_account_key_file: ${CI_PROJECT_DIR}/sa-key.json
+
+# Кэш скачанных провайдеров между job'ами.
+cache:
+  key: tf-plugins-${CI_COMMIT_REF_SLUG}
+  paths:
+    - ${TF_ROOT}/.terraform
+
+# Общие шаги подготовки: ключ СА + init с удалённым backend.
+.tf_before: &tf_before
+  - cd "${TF_ROOT}"
+  - echo "${YC_SA_JSON}" > "${SA_KEY_FILE}"
+  - terraform --version
+
+# ---------------------------------------------------------------------------
+# validate — форматирование и валидация (без доступа к backend).
+# ---------------------------------------------------------------------------
+validate:
+  stage: validate
+  script:
+    - cd "${TF_ROOT}"
+    - terraform fmt -check -recursive
+    - terraform init -backend=false
+    - terraform validate -no-color
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+
+# ---------------------------------------------------------------------------
+# plan — формирует план и сохраняет его как артефакт для стадии apply.
+# ---------------------------------------------------------------------------
+plan:
+  stage: plan
+  script:
+    - *tf_before
+    - >
+      terraform init
+      -backend-config="bucket=${TF_STATE_BUCKET}"
+      -backend-config="key=${TF_STATE_KEY}"
+    - terraform plan -no-color -input=false -out="${TF_PLAN_FILE}"
+  artifacts:
+    paths:
+      - ${TF_ROOT}/${TF_PLAN_FILE}
+    expire_in: 7 days
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+
+# ---------------------------------------------------------------------------
+# apply — РУЧНОЙ запуск (when: manual) только на main. Применяет ровно тот
+# план, что сформирован в стадии plan (через артефакт).
+# ---------------------------------------------------------------------------
+apply:
+  stage: apply
+  script:
+    - *tf_before
+    - >
+      terraform init
+      -backend-config="bucket=${TF_STATE_BUCKET}"
+      -backend-config="key=${TF_STATE_KEY}"
+    - terraform apply -no-color -input=false -auto-approve "${TF_PLAN_FILE}"
+  # Изоляция окружения + защита apply.
+  environment:
+    name: ${TF_ENV}
+  dependencies:
+    - plan
+  rules:
+    # apply доступен только на main и запускается вручную (кнопка в GitLab).
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+      allow_failure: false

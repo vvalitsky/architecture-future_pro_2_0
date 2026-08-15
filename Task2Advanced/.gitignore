@@ -1,0 +1,36 @@
+# --- Terraform ---
+# Локальные каталоги и кэш провайдеров
+**/.terraform/*
+.terraform.lock.hcl.bak
+
+# ВАЖНО: state локально не хранится (он в Object Storage), но на случай
+# случайного локального прогона/миграции — игнорируем любые state-файлы.
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# Файлы переменных со значениями (могут содержать чувствительные данные)
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+
+# Параметры backend с реальными значениями
+backend.hcl
+!backend.hcl.example
+
+# Планы (могут содержать секреты в открытом виде)
+tfplan
+*.tfplan
+plan_output.txt
+
+# --- Секреты / ключи ---
+sa-key.json
+*-key.json
+*.pem
+.env
+.env.*
+
+# --- Прочее ---
+.DS_Store
+*.log

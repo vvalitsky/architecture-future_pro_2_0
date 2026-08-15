@@ -1,0 +1,105 @@
+@startmindmap
+' Расширенный технический радар «Будущее 2.0»
+' Альтернативный экспорт в PlantUML (mindmap): квадрант -> кольцо -> элементы.
+' Цвета колец: Adopt=зелёный, Trial=жёлтый, Assess=голубой, Hold=красный.
+
+<style>
+mindmapDiagram {
+  .adopt  { BackgroundColor #C8E6C9 }
+  .trial  { BackgroundColor #FFF9C4 }
+  .assess { BackgroundColor #B3E5FC }
+  .hold   { BackgroundColor #FFCDD2 }
+}
+</style>
+
+* Tech Radar\n«Будущее 2.0»
+
+** Techniques / Patterns
+*** Adopt <<adopt>>
+**** Event-Driven Architecture
+**** Outbox
+**** Anti-Corruption Layer
+**** DDD / Bounded Contexts
+**** Schema contracts
+**** Strangler Fig
+**** GitOps
+*** Trial <<trial>>
+**** Data Mesh
+**** Self-service BI
+**** Lakehouse
+**** CQRS
+**** Saga
+**** Data Contracts
+**** Streaming-витрины
+*** Assess <<assess>>
+**** Change Data Capture
+**** Reverse ETL
+**** Feature Store
+**** Data Fabric
+**** Zero Trust
+*** Hold <<hold>>
+**** Логика в DWH (T-SQL)
+**** Синхронные интеграции на критпути
+**** Batch-only отчётность
+
+** Platforms
+*** Adopt <<adopt>>
+**** Yandex Managed Kubernetes
+**** Object Storage (S3)
+**** Managed Kafka + Schema Registry
+**** Managed PostgreSQL
+**** HashiCorp Vault
+**** API Gateway
+*** Trial <<trial>>
+**** Managed ClickHouse
+**** Apache Iceberg
+**** Yandex DataProc
+**** Apache Flink
+**** Yandex DataLens
+**** Trino
+*** Hold <<hold>>
+**** MS SQL Server 2008 DWH
+**** Apache Camel ESB
+**** On-prem ЦОД
+
+left side
+
+** Tools
+*** Adopt <<adopt>>
+**** Terraform
+**** GitLab CI / GitHub Actions
+**** Prometheus + Grafana
+**** ELK / Loki
+**** Schema Registry
+*** Trial <<trial>>
+**** ArgoCD
+**** dbt
+**** OpenTelemetry
+**** Metabase / Superset
+**** Kafka Connect / Debezium
+*** Assess <<assess>>
+**** DataHub / OpenMetadata
+**** Great Expectations
+*** Hold <<hold>>
+**** Power BI (кастомный)
+**** PowerBuilder-клиент
+
+** Languages & Frameworks
+*** Adopt <<adopt>>
+**** Python
+**** Golang
+**** Java
+**** Avro
+**** SQL (ANSI/ClickHouse/Trino)
+**** REST / OpenAPI
+*** Trial <<trial>>
+**** Kafka Streams
+**** gRPC / Protobuf
+**** Spring Boot
+*** Assess <<assess>>
+**** Kotlin
+*** Hold <<hold>>
+**** T-SQL (логика в DWH)
+**** PowerScript (PowerBuilder)
+
+@endmindmap

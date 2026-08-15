@@ -1,0 +1,42 @@
+# Terraform служебные каталоги и файлы
+.terraform/
+.terraform.tfstate.lock.info
+
+# State-файлы (могут содержать секреты) — не коммитить
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# Файлы переменных с реальными значениями/секретами — по умолчанию игнорируем.
+*.tfvars
+*.tfvars.json
+
+# ...но оставляем в репозитории безопасные демо-конфигурации окружений
+# (в них только плейсхолдеры; секрет yc_token задаётся через TF_VAR_yc_token)
+# и пример-файлы.
+!*.tfvars.example
+!envs/dev/dev.tfvars
+!envs/stage/stage.tfvars
+!envs/prod/prod.tfvars
+
+# Локальные секретные файлы, которые НЕ должны попадать в репозиторий:
+#   terraform.tfvars, *.auto.tfvars, secrets.tfvars и т. п. — остаются под *.tfvars
+
+# План-файлы
+*.tfplan
+
+# Lock-файл провайдеров (опционально; можно версионировать при желании)
+# .terraform.lock.hcl
+
+# Переопределения для локальной разработки
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Логи Terraform
+terraform.log
+
+# Прочее
+*.bak

@@ -1,0 +1,119 @@
+@startuml bounded-contexts
+' Context Map «Будущее 2.0» — альтернативный экспорт (PlantUML)
+' Паттерны: C/S = Customer/Supplier, CF = Conformist, ACL = Anticorruption Layer,
+'           OHS = Open Host Service, PL = Published Language, SK = Shared Kernel
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Segoe UI"
+skinparam rectangle {
+  BorderColor #333333
+  FontColor #111111
+}
+skinparam ArrowColor #444444
+skinparam ArrowFontColor #7A3E00
+
+title Context Map — целевая событийная платформа «Будущее 2.0»
+
+' ==================== CORE ====================
+package "Core-домены" #FDE7D0 {
+  rectangle "Patient Flow\n(Пациентский поток)" as PF
+  rectangle "Medical Records / EHR\n(Медкарты, исследования)" as EHR
+  rectangle "AI Diagnostics\n(ИИ-диагностика)" as AID
+  rectangle "Banking & Payments\n(Банкинг и платежи)" as BP
+  rectangle "Lending / Credit\n(Кредитование)" as LC
+}
+
+' ==================== SUPPORTING ====================
+package "Supporting-домены" #E3F0FB {
+  rectangle "Billing\n(Биллинг медуслуг)" as BIL
+  rectangle "Inventory / Supply Chain\n(Инвентаризация, фарма)" as INV
+  rectangle "Customer / Identity / MDM\n(Единый профиль клиента)" as MDM
+  rectangle "Data Platform / Analytics\n(Data Mesh, self-service BI)" as DP
+  rectangle "Compliance & Security\n(Комплаенс и ИБ)" as CS
+}
+
+' ==================== GENERIC ====================
+package "Generic-домены" #EDEDED {
+  rectangle "Staff / HR\n(Персонал)" as HR
+  rectangle "Notifications\n(Уведомления)" as NOT
+}
+
+' ==================== LEGACY / EXTERNAL ====================
+package "Легаси — мосты совместимости" #F6D5D5 {
+  rectangle "DWH · MS SQL 2008" as DWH
+  rectangle "ESB · Apache Camel" as CAMEL
+  rectangle "ACL-DWH\n(антикоррупционный слой)" as ACLD
+  rectangle "ACL-Camel\n(антикоррупционный слой)" as ACLC
+}
+
+package "Внешние системы" #F5F5DC {
+  rectangle "СБП / НСПК" as SBP
+  rectangle "Бюро кредитных историй" as BKI
+}
+
+rectangle "Kafka + Schema Registry\n(Avro/Protobuf, DLQ)" as KAFKA #FFF3C4
+
+' ==================== СВЯЗИ / ПАТТЕРНЫ ====================
+' Идентичность и профиль
+MDM --> PF  : OHS · PL
+MDM --> BP  : OHS · PL
+MDM --> LC  : OHS · PL
+MDM --> BIL : OHS · PL
+
+' Комплаенс
+CS --> PF  : OHS (политики, маскирование)
+CS --> BP  : OHS (политики, маскирование)
+CS <--> MDM : SK (модель ПДн/согласий)
+
+' Клинический поток
+PF --> EHR : C/S
+PF --> BIL : C/S
+PF --> INV : C/S
+EHR --> AID : PL (FHIR / DICOM)
+AID --> EHR : CF (заключение ИИ)
+
+' Деньги
+BIL --> BP : C/S
+LC  --> BP : C/S
+LC  --> BKI : ACL
+BP  --> SBP : ACL
+
+' Аналитика (без EHR/AID — изоляция PHI)
+PF  --> DP : data product (PL/Avro)
+BP  --> DP : data product (PL/Avro)
+LC  --> DP : data product (PL/Avro)
+BIL --> DP : data product (PL/Avro)
+INV --> DP : data product (PL/Avro)
+
+' Уведомления
+PF  --> NOT : CF
+BP  --> NOT : CF
+LC  --> NOT : CF
+AID --> NOT : CF
+
+' HR публикует персонал
+HR --> PF : OHS (график смен)
+
+' Легаси через ACL и Kafka
+DWH  --> ACLD : CDC (Debezium)
+ACLD --> KAFKA : нормализ. события (Avro)
+CAMEL <--> ACLC : обёртка маршрутов
+ACLC <--> KAFKA : события / команды
+KAFKA --> PF
+KAFKA --> BP
+KAFKA --> BIL
+PF ..> ACLC : outbox → команда в легаси
+BP ..> ACLD : сверка реестров
+
+legend right
+  |= Паттерн |= Расшифровка |
+  | C/S | Customer/Supplier |
+  | CF  | Conformist |
+  | ACL | Anticorruption Layer |
+  | OHS | Open Host Service |
+  | PL  | Published Language |
+  | SK  | Shared Kernel |
+endlegend
+
+@enduml

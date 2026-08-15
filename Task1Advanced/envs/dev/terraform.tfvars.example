@@ -1,0 +1,30 @@
+# =====================================================================
+# Пример файла переменных для окружения DEV.
+# Скопируйте в dev.tfvars и заполните реальными значениями.
+# Секрет yc_token НЕ храните в файле — используйте:
+#   export TF_VAR_yc_token="$(yc iam create-token)"   (Linux/macOS)
+#   $env:TF_VAR_yc_token = (yc iam create-token)       (PowerShell)
+# =====================================================================
+
+cloud_id  = "b1gxxxxxxxxxxxxxxxxx"
+folder_id = "b1gyyyyyyyyyyyyyyyyy"
+zone      = "ru-central1-a"
+
+name          = "future20-dev-vm"
+cores         = 2
+memory_gb     = 2
+core_fraction = 20
+preemptible   = true
+
+image_id           = "fd8xxxxxxxxxxxxxxxxx" # актуальный Ubuntu из Marketplace
+boot_disk_size_gb  = 10
+extra_disk_size_gb = 0
+
+subnet_id           = "e9bxxxxxxxxxxxxxxxxx"
+ssh_public_key_path = "~/.ssh/id_rsa.pub"
+
+labels = {
+  environment = "dev"
+  project     = "future20"
+  managed_by  = "terraform"
+}

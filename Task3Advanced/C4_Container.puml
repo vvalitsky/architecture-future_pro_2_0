@@ -1,0 +1,103 @@
+@startuml C4_Container_Future20
+' Альтернативный формат (PlantUML C4) для диаграммы контейнеров.
+' Рендерится в PlantUML со стандартной библиотекой C4-PlantUML.
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_WITH_LEGEND()
+title Контейнеры (C4 L2): целевая платформа «Будущее 2.0»
+
+Person(patient, "Пациент / клиент банка", "Веб и мобильные каналы")
+Person(doctor, "Врач / оператор клиники", "Рабочее место в клинике")
+Person(analyst, "Аналитик домена", "Self-service отчётность")
+
+System_Ext(bank_ext, "Внешние банковские системы", "СБП/НСПК, БКИ, платёжные шлюзы")
+System_Ext(partner, "Партнёры фарма/электроника", "Каталог, заказы, телеметрия")
+System_Ext(regulator, "Регуляторы", "ЦБ РФ, Росздравнадзор, Роскомнадзор")
+
+System_Boundary(future20, "Платформа «Будущее 2.0» — Yandex Cloud, Managed Kubernetes") {
+
+    Container(apigw, "API Gateway", "Yandex API Gateway / Envoy", "Аутентификация, маршрутизация, rate limiting, mTLS")
+
+    Boundary(domains, "Доменные сервисы (bounded contexts)") {
+        Container(patientflow, "Patient Flow", "Go/Java", "Регистрация, расписание, визиты")
+        Container(ehr, "Medical Records / EHR", "Python/Go", "Медкарты и исследования; изолированный контур PHI")
+        Container(ai, "AI Diagnostics", "Python", "Снимки, инференс, заключения")
+        Container(banking, "Banking & Payments", "Go/Java", "Счета, платежи, транзакции")
+        Container(lending, "Lending / Credit", "Java", "Кредитные договоры, скоринг")
+        Container(billing, "Billing", "Go", "Счета за медуслуги, страховые расчёты")
+        Container(hr, "Staff / HR", "Go", "Персонал клиник")
+        Container(inventory, "Inventory / Supply Chain", "Go", "Оборудование, фарма, склад")
+        Container(mdm, "Customer / Identity / MDM", "Go", "Единый профиль клиента")
+        Container(compliance, "Compliance & Security", "Go", "ПДн, врачебная тайна, аудит")
+        Container(notify, "Notifications", "Go", "Уведомления по событиям")
+    }
+
+    ContainerDb(pg, "Managed PostgreSQL (per domain)", "Yandex Managed PostgreSQL", "БД на домен + outbox")
+
+    Boundary(backbone, "Событийная шина") {
+        ContainerQueue(kafka, "Apache Kafka", "Yandex Managed Kafka", "Event backbone")
+        Container(schemareg, "Schema Registry", "Avro/Protobuf", "Каталог и версии схем")
+        ContainerQueue(dlq, "DLQ", "Kafka topics", "Сбойные события, повтор")
+        Container(stream, "Stream Processing", "Kafka Streams / Flink", "Потоковые витрины")
+    }
+
+    Boundary(mesh, "Data Mesh платформа") {
+        ContainerDb(lake, "Lakehouse", "Object Storage S3 + Iceberg", "Data products без PHI")
+        Container(query, "Query Engine", "Trino / ClickHouse", "Аналитические запросы")
+        Container(dbt, "Трансформации", "dbt", "Модели data products")
+        Container(catalog, "Каталог и governance", "DataHub / OpenMetadata", "Метаданные, lineage, контракты")
+        Container(bi, "Self-service BI портал", "DataLens / Metabase / Superset", "Конструктор отчётов")
+    }
+
+    Boundary(platform, "Платформенные сервисы") {
+        Container(vault, "Vault / IAM", "Vault + Yandex IAM", "Секреты, доступы, шифрование")
+        Container(obs, "Observability", "Prometheus, Grafana, OTel, Loki", "Метрики, трейсы, логи")
+    }
+
+    Boundary(bridges, "Мосты к легаси (ACL)") {
+        Container(acl_dwh, "ACL к DWH", "Debezium CDC + REST", "Антикоррупционный слой к MS SQL 2008")
+        Container(acl_camel, "ACL к Camel", "REST/gRPC адаптер", "Антикоррупционный слой к Apache Camel")
+    }
+}
+
+System_Ext(dwh, "Легаси DWH", "MS SQL Server 2008")
+System_Ext(camel, "Легаси ESB", "Apache Camel")
+
+Rel(patient, apigw, "Запись, оплата", "HTTPS")
+Rel(doctor, apigw, "Приём, расписание", "HTTPS/gRPC")
+Rel(analyst, bi, "Отчёты и дашборды", "HTTPS")
+
+Rel(apigw, patientflow, "Маршрутизация", "REST/gRPC")
+Rel(apigw, banking, "Маршрутизация", "REST/gRPC")
+Rel(apigw, lending, "Маршрутизация", "REST/gRPC")
+
+Rel(patientflow, pg, "Чтение/запись + outbox", "SQL")
+Rel(banking, pg, "Чтение/запись + outbox", "SQL")
+Rel(lending, pg, "Чтение/запись + outbox", "SQL")
+
+Rel(patientflow, kafka, "Публикация событий", "Avro")
+Rel(banking, kafka, "Публикация/подписка", "Avro")
+Rel(lending, kafka, "Публикация/подписка", "Avro")
+Rel(notify, kafka, "Подписка", "Avro")
+
+Rel(kafka, schemareg, "Валидация схем", "HTTP")
+Rel(kafka, dlq, "Сбойные сообщения", "Kafka")
+Rel(stream, kafka, "Чтение/запись потоков", "Kafka")
+
+Rel(stream, lake, "Материализация data products", "Iceberg")
+Rel(query, lake, "Запросы", "SQL")
+Rel(dbt, query, "Трансформации", "SQL")
+Rel(bi, query, "Аналитика", "SQL")
+Rel(catalog, lake, "Метаданные/lineage", "API")
+
+Rel(acl_dwh, dwh, "CDC/JDBC", "Debezium/SQL")
+Rel(acl_camel, camel, "Адаптация", "REST/gRPC")
+Rel(acl_dwh, kafka, "Нормализованные события", "Avro")
+Rel(acl_camel, kafka, "Нормализованные события", "Avro")
+
+Rel(banking, bank_ext, "Платежи/транзакции", "ISO 20022/REST")
+Rel(lending, bank_ext, "Скоринг/БКИ", "REST")
+Rel(inventory, partner, "Заказы/каталог", "REST")
+Rel(compliance, regulator, "Отчётность", "SFTP/API")
+
+@enduml
