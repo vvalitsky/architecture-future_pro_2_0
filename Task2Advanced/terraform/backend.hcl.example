@@ -1,0 +1,30 @@
+# backend.hcl.example — пример параметров backend, передаваемых в `terraform init`.
+#
+# Скопируйте в backend.hcl (он в .gitignore) и подставьте свои значения,
+# ЛИБО передавайте эти же ключи флагами -backend-config="key=value".
+#
+# Запуск:
+#   terraform init -backend-config=backend.hcl
+# или:
+#   terraform init \
+#     -backend-config="bucket=future20-tf-state" \
+#     -backend-config="key=future-2-0/dev/terraform.tfstate"
+#
+# access_key/secret_key здесь НЕ указываем — они берутся из env
+# AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY (в CI/CD — из маскированных secrets).
+
+# Имя bucket в Yandex Object Storage, созданного bootstrap-кодом.
+bucket = "future20-tf-state"
+
+# Ключ (путь) файла состояния. ОТДЕЛЬНЫЙ ключ на каждое окружение:
+#   future-2-0/dev/terraform.tfstate
+#   future-2-0/stage/terraform.tfstate
+#   future-2-0/prod/terraform.tfstate
+key = "future-2-0/dev/terraform.tfstate"
+
+# --- Альтернатива: локальный Minio (S3-совместимый) ---
+# endpoints = { s3 = "http://localhost:9000" }
+# bucket    = "tf-state"
+# key       = "future-2-0/dev/terraform.tfstate"
+# region    = "us-east-1"
+# (skip_* флаги и use_lockfile уже заданы в backend.tf)

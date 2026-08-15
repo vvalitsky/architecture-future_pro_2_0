@@ -1,0 +1,30 @@
+# =====================================================================
+# Пример файла переменных для окружения STAGE.
+# Скопируйте в stage.tfvars и заполните реальными значениями.
+# Секрет yc_token НЕ храните в файле — используйте:
+#   export TF_VAR_yc_token="$(yc iam create-token)"   (Linux/macOS)
+#   $env:TF_VAR_yc_token = (yc iam create-token)       (PowerShell)
+# =====================================================================
+
+cloud_id  = "b1gxxxxxxxxxxxxxxxxx"
+folder_id = "b1gyyyyyyyyyyyyyyyyy"
+zone      = "ru-central1-b"
+
+name          = "future20-stage-vm"
+cores         = 4
+memory_gb     = 8
+core_fraction = 100
+preemptible   = false
+
+image_id           = "fd8xxxxxxxxxxxxxxxxx" # актуальный Ubuntu из Marketplace
+boot_disk_size_gb  = 50
+extra_disk_size_gb = 0
+
+subnet_id           = "e9bxxxxxxxxxxxxxxxxx"
+ssh_public_key_path = "~/.ssh/id_rsa.pub"
+
+labels = {
+  environment = "stage"
+  project     = "future20"
+  managed_by  = "terraform"
+}

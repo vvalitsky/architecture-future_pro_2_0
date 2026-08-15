@@ -1,0 +1,11 @@
+# terraform.tfvars.example (bootstrap) — скопируйте в terraform.tfvars и заполните.
+
+yc_cloud_id  = "b1gxxxxxxxxxxxxxxxxx"
+yc_folder_id = "b1gyyyyyyyyyyyyyyyyy"
+yc_zone      = "ru-central1-a"
+
+# Путь к JSON-ключу СА с правами на создание СА/ключей/bucket в folder.
+yc_service_account_key_file = "sa-key.json"
+
+# Глобально уникальное имя bucket под state.
+state_bucket_name = "future20-tf-state"
