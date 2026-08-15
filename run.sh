@@ -6,12 +6,12 @@
 # ни java, ни облачные креды устанавливать/задавать НЕ требуется.
 #
 # Команды:
-#   ./run.sh check       terraform validate (Task1/Task2) + Mermaid + PlantUML   [по умолчанию]
+#   ./run.sh check       terraform validate (Task1Advanced/Task2Advanced) + Mermaid + PlantUML   [по умолчанию]
 #   ./run.sh terraform   только terraform fmt-check + validate
 #   ./run.sh diagrams    только проверка диаграмм (Mermaid + PlantUML)
 #   ./run.sh fmt         авто-форматирование terraform-кода (terraform fmt)
 #   ./run.sh up          поднять локальный Minio + создать bucket под state
-#   ./run.sh demo        рабочее демо удалённого state (Task2) на локальном Minio
+#   ./run.sh demo        рабочее демо удалённого state (Task2Advanced) на локальном Minio
 #   ./run.sh down        остановить Minio и удалить данные
 #   ./run.sh all         check + demo
 #   ./run.sh help
@@ -108,14 +108,14 @@ cmd_terraform() {
   need_docker; prep
   head "Terraform: fmt-check + validate (в Docker, без облачных кредов)"
 
-  tf_validate "Task1/modules/vm"
+  tf_validate "Task1Advanced/modules/vm"
   for e in dev stage prod; do
     # -var в `terraform validate` не поддерживается; значение приходит через
     # TF_VAR_ssh_public_key_path (см. tf()).
-    tf_validate "Task1/envs/$e"
+    tf_validate "Task1Advanced/envs/$e"
   done
-  tf_validate "Task2/terraform"
-  tf_validate "Task2/terraform/bootstrap"
+  tf_validate "Task2Advanced/terraform"
+  tf_validate "Task2Advanced/terraform/bootstrap"
   tf_validate "$DEMO_DIR"
 
   hr; printf 'terraform fmt -check (мягкая проверка стиля)\n'
@@ -159,7 +159,7 @@ cmd_diagrams() {
         fail "mermaid НЕВАЛИДЕН: $f"
         printf '%s\n' "$out" | tail -15
       fi
-    done < <(find Task1 Task2 Task3 Task4 Task5 -name '*.md' | sort)
+    done < <(find Task1Advanced Task2Advanced Task3Advanced Task4Advanced Task5Advanced -name '*.md' | sort)
     [ "$any" = 1 ] || warn "не найдено .md с блоками mermaid"
     if [ "$mmd_infra" = 1 ]; then
       warn "Mermaid локально не проверен: mermaid-cli требует headless Chromium, а он не запускается под эмуляцией (Apple Silicon/Rosetta)."
@@ -175,9 +175,9 @@ cmd_diagrams() {
   while IFS= read -r pf; do
     s=$(grep -c '@start' "$pf"); e=$(grep -c '@end' "$pf")
     if [ "$s" -ge 1 ] && [ "$s" = "$e" ]; then ok "puml баланс @start/@end: $pf"; else fail "puml баланс: $pf ($s/$e)"; fi
-  done < <(find Task1 Task2 Task3 Task4 Task5 -name '*.puml' | sort)
+  done < <(find Task1Advanced Task2Advanced Task3Advanced Task4Advanced Task5Advanced -name '*.puml' | sort)
   # Полный рендер PlantUML — best-effort: требует интернет для include C4-stdlib.
-  local pumls; pumls=$(find Task1 Task2 Task3 Task4 Task5 -name '*.puml' | sort)
+  local pumls; pumls=$(find Task1Advanced Task2Advanced Task3Advanced Task4Advanced Task5Advanced -name '*.puml' | sort)
   if [ -n "$pumls" ]; then
     hr; printf 'plantuml -checkonly (best-effort, нужен интернет для C4-PlantUML include)\n'
     # shellcheck disable=SC2086
@@ -222,7 +222,7 @@ tf_minio() {
 cmd_demo() {
   need_docker; prep
   cmd_up
-  head "Демо: удалённый state (Task2) на локальном Minio — реальный apply без облака"
+  head "Демо: удалённый state (Task2Advanced) на локальном Minio — реальный apply без облака"
   tf_minio init -input=false -reconfigure -backend-config=backend.minio.hcl || { fail "demo: init"; return; }
   tf_minio apply -auto-approve -input=false || { fail "demo: apply"; return; }
   hr; printf 'terraform output:\n'; tf_minio output
@@ -254,12 +254,12 @@ usage() {
 run.sh — локальный запуск и проверка решений «Будущее 2.0». Всё в Docker;
 облачные креды и локальные terraform/node/java не нужны.
 
-  ./run.sh check       terraform validate (Task1/Task2) + Mermaid + PlantUML  [по умолчанию]
+  ./run.sh check       terraform validate (Task1Advanced/Task2Advanced) + Mermaid + PlantUML  [по умолчанию]
   ./run.sh terraform   только terraform fmt-check + validate
   ./run.sh diagrams    только проверка диаграмм (Mermaid + PlantUML)
   ./run.sh fmt         авто-форматирование terraform-кода (terraform fmt)
   ./run.sh up          поднять локальный Minio + создать bucket под state
-  ./run.sh demo        рабочее демо удалённого state (Task2) на локальном Minio
+  ./run.sh demo        рабочее демо удалённого state (Task2Advanced) на локальном Minio
   ./run.sh down        остановить Minio и удалить данные
   ./run.sh all         check + demo
   ./run.sh help        эта справка
